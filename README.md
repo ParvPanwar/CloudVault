@@ -55,9 +55,8 @@ aws login --profile cloudvault --region ap-southeast-2
 ```
 
 Toolkit skills and MCP settings are installed locally, outside this repository.
-Project instructions live in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and
-`.cursor/rules/aws-agent-toolkit.mdc`. Restart your coding session to load the new
-rules and skills. This setup does not provision CloudVault infrastructure.
+CloudVault-specific development instructions live in `AGENTS.md`.
+Infrastructure templates and deployment notes live in [infra/](infra/README.md).
 
 ## API and upload flow
 
@@ -200,9 +199,8 @@ For the exact dependency set tested at this milestone, install
 ```text
 backend/          FastAPI app, configuration, routes, AWS service adapters
 tests/            Offline API and AWS adapter tests
-infra/            Manual AWS resource and permission setup
+infra/            CloudFormation templates and deployment notes
 worker/           Queue contract for the next implementation phase
-frontend/         Dashboard scope for the next implementation phase
 .github/workflows/ Continuous integration
 ```
 
