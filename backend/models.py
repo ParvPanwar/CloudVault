@@ -34,6 +34,11 @@ class FileView(BaseModel):
     content_type: str
     status: FileStatus
     created_at: str
+    attempt_count: int = 0
+    last_error: str | None = None
+    retry_at: int | None = None
+    processed_size_bytes: int = 0
+    has_thumbnail: bool = False
 
 
 class HashResult(BaseModel):

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -28,6 +29,11 @@ def view(ref, master):
         content_type=master["content_type"],
         status=master["status"],
         created_at=ref["created_at"],
+        attempt_count=master.get("attempt_count", 0),
+        last_error=master.get("last_error"),
+        retry_at=master.get("retry_at"),
+        processed_size_bytes=master.get("processed_size_bytes", 0),
+        has_thumbnail=bool(master.get("thumbnail_s3_key")),
     )
 
 
@@ -107,16 +113,23 @@ def download_file(
     file_id: str,
     user_id: User,
     services: AWS,
-    variant: Literal["original", "processed"] = "original",
+    variant: Literal["original", "processed", "thumbnail"] = "original",
 ):
-    _, master = owned_file(services, user_id, file_id)
+    ref, master = owned_file(services, user_id, file_id)
     if master["status"] not in VERIFIED:
         raise HTTPException(409, "Upload has not been confirmed")
-    if variant == "processed" and (
-        master["status"] != "READY" or not master.get("processed_s3_key")
+    if variant != "original" and (
+        master["status"] != "READY"
+        or not master.get("thumbnail_s3_key" if variant == "thumbnail" else "processed_s3_key")
     ):
         raise HTTPException(409, "Processed file is not ready")
-    return DownloadResult(download_url=services.storage.presign_download(master, variant))
+    extension = "pdf" if master["content_type"] == "application/pdf" else "jpg"
+    filename = (
+        ref["filename"]
+        if variant == "original"
+        else (f"{Path(ref['filename']).stem}-{variant}.{extension}")
+    )
+    return DownloadResult(download_url=services.storage.presign_download(master, variant, filename))
 
 
 @router.get("/stats", response_model=StorageStats, tags=["stats"])
@@ -139,7 +152,10 @@ def stats(user_id: User, services: AWS):
         if cursor is None:
             break
     raw = sum(int(m["size_bytes"]) for m in masters.values() if m["status"] in VERIFIED)
-    processed = sum(int(m.get("processed_size_bytes", 0)) for m in masters.values())
+    processed = sum(
+        int(m.get("processed_size_bytes", 0)) + int(m.get("thumbnail_size_bytes", 0))
+        for m in masters.values()
+    )
     saved = logical - raw
     return StorageStats(
         total_logical_files=total,

@@ -12,9 +12,11 @@ SQS/DLQ, a scoped runtime role/profile, and email cost alerts. It is defined in
 [infra/core.yaml](infra/core.yaml) and [infra/budget.yaml](infra/budget.yaml).
 Deployment and cost decisions are documented in [infra/README.md](infra/README.md).
 
-**Next:** SQS worker (PDF/image processing), dashboard, AWS deployment, academic report.
-The API queues jobs; it does not process them yet. New confirmed files stay `QUEUED`
-until a worker is implemented and running.
+**Implemented:** SQS worker for images and PDFs, plus a tenant-authenticated dashboard.
+The worker validates source bytes, creates optimized watermarked outputs and image
+thumbnails, and uses a DynamoDB lease to make SQS retries safe. New confirmed files
+move through `QUEUED → PROCESSING → READY`; invalid or repeatedly failing files end
+in `FAILED` after three attempts.
 
 ## Run locally
 
@@ -34,12 +36,22 @@ Configure AWS credentials through your local AWS profile or an EC2 instance role
 the application uses boto3's standard credential chain.
 
 ```sh
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 5173
 ```
 
-- Interactive API: <http://127.0.0.1:8000/docs> — click **Authorize** and paste a tenant token.
-- Liveness: <http://127.0.0.1:8000/health> — does not check AWS connectivity.
-- OpenAPI: <http://127.0.0.1:8000/openapi.json>.
+- Dashboard: <http://127.0.0.1:5173> — enter one tenant token; it is held only in the tab's memory.
+- Interactive API: <http://127.0.0.1:5173/docs> — click **Authorize** and paste a tenant token.
+- Liveness: <http://127.0.0.1:5173/health> — does not check AWS connectivity.
+- OpenAPI: <http://127.0.0.1:5173/openapi.json>.
+
+In a second terminal, start the worker:
+
+```sh
+source .venv/bin/activate
+python -m worker
+```
+
+Use `python -m worker --once` to receive and process one long-poll cycle during local testing.
 
 The server can start without AWS configuration. Authenticated file requests return
 `503` until resource settings are supplied. Without tenant tokens, all file requests
@@ -121,7 +133,7 @@ settings = Settings()
 path = Path("notes.pdf")
 data = path.read_bytes()
 with httpx.Client(
-    base_url="http://127.0.0.1:8000",
+      base_url="http://127.0.0.1:5173",
     headers={"Authorization": f"Bearer {settings.tenant_tokens['alice']}"},
 ) as api:
     response = api.post("/api/files/initiate-upload", json={
@@ -204,10 +216,10 @@ For the exact dependency set tested at this milestone, install
 ## Layout
 
 ```text
-backend/          FastAPI app, configuration, routes, AWS service adapters
+backend/          FastAPI app, dashboard, configuration, routes, AWS service adapters
 tests/            Offline API and AWS adapter tests
 infra/            CloudFormation templates and deployment notes
-worker/           Queue contract for the next implementation phase
+worker/           SQS consumer, processing subprocess, and retry-safe state changes
 .github/workflows/ Continuous integration
 ```
 

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CloudVault — a private file workspace with intelligent deduplication and background processing.">
+  <meta name="color-scheme" content="light">
+  <title>CloudVault · File workspace</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%230c8e79'/%3E%3Cpath d='m20 9 12 7-12 7-12-7zm-12 13 12 7 12-7' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-vault" viewBox="0 0 24 24"><path d="m12 3 10 6-10 6L2 9l10-6Z"/><path d="m2 15 10 6 10-6M2 12l10 6 10-6"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24"><path d="M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 3v17h17M9 15v-4M14 15V7M19 15V4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-2l2.4 3M4 16l2.4 3a7 7 0 0 0 11.5-2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 14h8M8 17h5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-7 5 8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 4 16 4 16 0V5M4 12v7c0 4 16 4 16 0v-7"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a class="brand" href="/" aria-label="CloudVault home"><span class="brand-mark"><svg><use href="#i-vault"/></svg></span>CloudVault<span class="brand-dot">.</span></a>
+    <div class="workspace-label">YOUR WORKSPACE</div>
+    <nav class="nav-list">
+      <button class="nav-item active" data-view="files" aria-current="page"><svg><use href="#i-folder"/></svg> All files <span id="nav-file-count" class="nav-count">—</span></button>
+      <button class="nav-item" data-view="processing"><svg><use href="#i-queue"/></svg> Processing <span id="nav-processing-count" class="nav-count">—</span></button>
+      <button class="nav-item" data-view="insights"><svg><use href="#i-chart"/></svg> Storage insights</button>
+    </nav>
+    <div class="sidebar-divider"></div>
+    <div class="workspace-label">RESOURCES</div>
+    <a class="nav-item" href="/docs" target="_blank" rel="noopener"><svg><use href="#i-file"/></svg> API documentation <span class="external-arrow">↗</span></a>
+    <button class="nav-item" id="about-button"><svg><use href="#i-info"/></svg> How it works</button>
+    <div class="sidebar-bottom">
+      <div class="region-card"><span class="region-icon"><svg><use href="#i-globe"/></svg></span><div><strong id="region-label">Sydney, Australia</strong><span id="region-code">ap-southeast-2</span></div><span class="region-dot" aria-hidden="true"></span></div>
+      <div class="sidebar-footer"><svg><use href="#i-shield"/></svg> Private by design</div>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb"><button class="icon-button mobile-menu" id="menu-button" aria-label="Toggle navigation" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><span>Workspace</span><svg><use href="#i-chevron"/></svg><strong id="breadcrumb-view">All files</strong></div>
+      <div class="topbar-actions"><span class="connection-status" id="connection-status"><span></span>Not connected</span><button class="account-button" id="account-button"><span class="avatar" id="avatar">CV</span><span id="account-name">Connect workspace</span><svg><use href="#i-chevron"/></svg></button></div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow">LESS REDUNDANCY. MORE POSSIBILITY.</div><h1 id="page-title">Your file workspace</h1><p id="page-subtitle">A smarter home for your documents and images.</p></div><button class="button primary" id="upload-button"><svg><use href="#i-upload"/></svg> Upload files</button></div>
+
+      <div id="page-error" class="alert error" role="alert" hidden></div>
+
+      <section class="metrics" aria-label="Workspace metrics">
+        <article class="metric-card"><div class="metric-top"><span>Total files</span><span class="metric-icon blue"><svg><use href="#i-folder"/></svg></span></div><div class="metric-value" id="metric-files">—</div><div class="metric-caption" id="metric-files-caption">Your private file library</div></article>
+        <article class="metric-card"><div class="metric-top"><span>Logical storage</span><span class="metric-icon violet"><svg><use href="#i-copy"/></svg></span></div><div class="metric-value" id="metric-logical">—</div><div class="metric-caption">All confirmed file references</div></article>
+        <article class="metric-card"><div class="metric-top"><span>Physical storage</span><span class="metric-icon amber"><svg><use href="#i-database"/></svg></span></div><div class="metric-value" id="metric-physical">—</div><div class="metric-caption">Originals + processed outputs</div></article>
+        <article class="metric-card savings-card"><div class="metric-top"><span>Deduplication savings</span><span class="metric-icon green"><svg><use href="#i-spark"/></svg></span></div><div class="metric-value" id="metric-saved">—</div><div class="metric-caption"><span class="savings-percentage" id="metric-percent">0%</span> less duplicate data transferred</div></article>
+      </section>
+
+      <div id="files-view">
+        <section class="upload-grid" aria-label="Upload and processing">
+          <div class="upload-panel">
+            <div class="panel-heading"><h2>Add to your vault</h2><span class="subtle-tag"><svg><use href="#i-lock"/></svg> Encrypted storage</span></div>
+            <div class="dropzone" id="dropzone">
+              <span class="upload-illustration"><svg><use href="#i-upload"/></svg><span class="illustration-plus">+</span></span>
+              <h3>Drop your files here</h3><p>We’ll check for duplicates before uploading.</p>
+              <button class="button secondary" id="browse-button">Browse files <svg><use href="#i-arrow"/></svg></button>
+              <span class="upload-limits" id="upload-limits">PDF, PNG or JPG · Up to 50 MB per file</span>
+              <input id="file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
+            </div>
+            <section class="upload-activity" id="upload-activity" aria-label="Upload activity" hidden><div class="activity-heading"><h3>Upload activity</h3><button class="text-button" id="clear-uploads">Clear finished</button></div><div id="upload-jobs" aria-live="polite"></div></section>
+          </div>
+          <aside class="processing-panel"><div class="panel-heading"><h2>A little work. On us.</h2><span class="tiny-label">AUTOMATED</span></div><p class="processing-intro">From upload to ready, without the wait.</p><ol class="pipeline"><li><span class="pipeline-icon"><svg><use href="#i-copy"/></svg></span><div><strong>Fingerprint & deduplicate</strong><p>Identical files, one stored original.</p></div><span class="step-number">01</span></li><li><span class="pipeline-icon"><svg><use href="#i-upload"/></svg></span><div><strong>Upload directly</strong><p>Your files go straight to private storage.</p></div><span class="step-number">02</span></li><li><span class="pipeline-icon"><svg><use href="#i-spark"/></svg></span><div><strong>Make it ready</strong><p>Watermarks, optimized images & thumbnails.</p></div><span class="step-number">03</span></li></ol><div class="privacy-note"><svg><use href="#i-shield"/></svg><p><strong>Your workspace stays yours.</strong><br>Isolated files. Temporary download links.</p></div></aside>
+        </section>
+
+        <section class="file-panel" aria-labelledby="files-title">
+          <div class="library-heading"><div><h2 id="files-title">All files <span id="library-count" class="count-pill">0</span></h2><p id="library-subtitle">Everything in your workspace, neatly in one place.</p></div><div class="library-actions"><label class="search-field"><svg><use href="#i-search"/></svg><input id="search-input" type="search" placeholder="Search files…" aria-label="Search filenames"></label><button class="icon-button" id="refresh-button" aria-label="Refresh files"><svg><use href="#i-refresh"/></svg></button></div></div>
+          <div class="filter-row" aria-label="Filter files by status"><div class="filter-tabs" role="group"><button class="filter-tab active" data-filter="all" aria-pressed="true">All files</button><button class="filter-tab" data-filter="ready" aria-pressed="false">Ready</button><button class="filter-tab" data-filter="processing" aria-pressed="false">In progress</button><button class="filter-tab" data-filter="failed" aria-pressed="false">Needs attention</button></div><span class="live-note" id="live-note"><span></span> Connect to view your files</span></div>
+          <div class="table-scroll"><table class="file-table"><thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Status</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="file-rows"></tbody></table></div>
+          <div class="empty-state" id="empty-state"><span class="empty-icon"><svg><use href="#i-folder"/></svg></span><h3 id="empty-title">Your files belong here.</h3><p id="empty-description">Connect your workspace to get started.</p><button class="button secondary" id="empty-action">Connect workspace <svg><use href="#i-arrow"/></svg></button></div>
+          <div class="table-footer"><span id="table-summary">No workspace connected</span><button class="text-button" id="load-more" hidden>Load more files <svg><use href="#i-arrow"/></svg></button><span class="table-footer-note"><svg><use href="#i-shield"/></svg> Visible only to your tenant</span></div>
+        </section>
+      </div>
+
+      <section id="insights-view" hidden aria-label="Storage insights"><div class="insights-grid"><article class="insight-panel"><div class="panel-heading"><h2>Your storage, explained</h2><span class="subtle-tag">LIVE METRICS</span></div><p class="muted">See what is referenced, what is stored, and what is saved.</p><div class="storage-breakdown"><div><span>Logical file data</span><strong id="insight-logical">—</strong><div class="storage-track"><span id="bar-logical"></span></div></div><div><span>Unique originals</span><strong id="insight-raw">—</strong><div class="storage-track blue-track"><span id="bar-raw"></span></div></div><div><span>Processed outputs & thumbnails</span><strong id="insight-processed">—</strong><div class="storage-track pale-track"><span id="bar-processed"></span></div></div></div><p class="insight-footnote">Physical storage includes both original files and processing outputs. Processed PDFs may be larger after watermarking.</p></article><article class="insight-panel savings-insight"><span class="metric-icon green"><svg><use href="#i-spark"/></svg></span><h2>Same file. Less storage.</h2><div class="insight-savings" id="insight-saved">—</div><p>of duplicate file data avoided in this workspace.</p><div class="insight-rule"></div><p class="muted">Deduplication happens within your tenant. Other tenants’ files are never exposed or linked.</p></article></div></section>
+
+      <footer class="page-footer"><span>CloudVault <span class="footer-divider">/</span> Built for a lighter cloud.</span><span>SHA-256 verified uploads <span class="footer-divider">·</span> Tenant-isolated storage</span></footer>
+    </main>
+  </div>
+
+  <dialog id="connect-dialog" class="modal"><form id="connect-form"><div class="modal-top"><span class="brand-mark"><svg><use href="#i-vault"/></svg></span><button class="icon-button" type="button" data-close="connect-dialog" aria-label="Close"><svg><use href="#i-close"/></svg></button></div><div class="eyebrow">YOUR PRIVATE WORKSPACE</div><h2>Welcome to CloudVault.</h2><p class="muted">Connect with your tenant access token to upload, process and manage your files.</p><label for="token-input">Access token</label><input class="token-input" id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your tenant token" minlength="32" maxlength="512" required><p id="connect-error" class="field-error" role="alert" hidden></p><button class="button primary full-width" id="connect-submit" type="submit">Connect workspace <svg><use href="#i-arrow"/></svg></button><div class="token-note"><svg><use href="#i-lock"/></svg><span>Your token stays in memory and is cleared when you disconnect or reload this tab.</span></div></form></dialog>
+  <dialog id="account-dialog" class="modal small-modal"><div class="modal-top"><h2>Your workspace</h2><button class="icon-button" data-close="account-dialog" aria-label="Close"><svg><use href="#i-close"/></svg></button></div><p class="muted" id="account-detail"></p><button class="button secondary full-width" id="disconnect-button">Disconnect workspace</button></dialog>
+  <dialog id="details-dialog" class="modal"><div class="modal-top"><span class="eyebrow">FILE DETAILS</span><button class="icon-button" data-close="details-dialog" aria-label="Close"><svg><use href="#i-close"/></svg></button></div><h2 id="detail-filename"></h2><dl id="detail-list" class="detail-list"></dl><div id="detail-error" class="alert error" hidden></div><div class="detail-downloads" id="detail-downloads"></div></dialog>
+  <dialog id="about-dialog" class="modal"><div class="modal-top"><h2>A smarter path for every file.</h2><button class="icon-button" data-close="about-dialog" aria-label="Close"><svg><use href="#i-close"/></svg></button></div><p>CloudVault checks each file’s SHA-256 fingerprint before upload. Existing files in your tenant are linked instantly, without another transfer.</p><p>New files upload directly to private S3 storage. The background worker optimizes and watermarks images, creates thumbnails, and watermarks PDFs. Processing failures retry up to three times before dead-letter routing.</p><p class="muted">Originals remain available after confirmation. This is a token-authenticated project workspace; it does not scan files for malware.</p></dialog>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
+</body>
+</html>

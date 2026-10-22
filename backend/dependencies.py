@@ -39,26 +39,32 @@ def get_services(request: Request) -> Services:
         settings = request.app.state.settings
         if not all([settings.raw_bucket, settings.processed_bucket, settings.queue_url]):
             raise HTTPException(503, "Configure RAW_BUCKET, PROCESSED_BUCKET and QUEUE_URL")
-        session = boto3.Session(region_name=settings.aws_region, profile_name=settings.aws_profile)
-        config = Config(
-            connect_timeout=3,
-            read_timeout=5,
-            retries={"mode": "standard", "total_max_attempts": 3},
-        )
-        request.app.state.services = Services(
-            database=Database(
-                session.client("dynamodb", config=config),
-                settings.files_table,
-                settings.user_files_table,
-            ),
-            storage=Storage(
-                session.client("s3", config=config.merge(Config(signature_version="s3v4"))),
-                settings.raw_bucket,
-                settings.processed_bucket,
-            ),
-            queue=JobQueue(session.client("sqs", config=config), settings.queue_url),
-        )
+        request.app.state.services = build_services(settings)
     return request.app.state.services
+
+
+def build_services(settings) -> Services:
+    session = boto3.Session(region_name=settings.aws_region, profile_name=settings.aws_profile)
+    config = Config(
+        connect_timeout=3,
+        read_timeout=5,
+        retries={"mode": "standard", "total_max_attempts": 3},
+    )
+    return Services(
+        database=Database(
+            session.client("dynamodb", config=config),
+            settings.files_table,
+            settings.user_files_table,
+        ),
+        storage=Storage(
+            session.client("s3", config=config.merge(Config(signature_version="s3v4"))),
+            settings.raw_bucket,
+            settings.processed_bucket,
+        ),
+        queue=JobQueue(
+            session.client("sqs", config=config.merge(Config(read_timeout=25))), settings.queue_url
+        ),
+    )
 
 
 User = Annotated[str, Depends(current_user)]

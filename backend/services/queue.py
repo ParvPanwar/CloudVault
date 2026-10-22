@@ -19,3 +19,22 @@ class JobQueue:
                 }
             ),
         )
+
+    def receive(self, wait_seconds=20):
+        return self.client.receive_message(
+            QueueUrl=self.queue_url,
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=wait_seconds,
+            VisibilityTimeout=120,
+            MessageSystemAttributeNames=["ApproximateReceiveCount"],
+        ).get("Messages", [])
+
+    def acknowledge(self, receipt):
+        self.client.delete_message(QueueUrl=self.queue_url, ReceiptHandle=receipt)
+
+    def defer(self, receipt, seconds):
+        self.client.change_message_visibility(
+            QueueUrl=self.queue_url,
+            ReceiptHandle=receipt,
+            VisibilityTimeout=max(0, min(43200, int(seconds))),
+        )

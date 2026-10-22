@@ -1,38 +1,23 @@
-# Worker contract — next phase
+# CloudVault worker
 
-No worker is implemented yet. The backend sends this versioned JSON body to the
-standard SQS queue after verifying the uploaded S3 object's checksum, size, and type:
+The worker consumes the versioned SQS job emitted after a verified upload. Run it
+alongside the API with the same `.env` and AWS credentials:
 
-```json
-{
-  "version": 1,
-  "file_hash": "alice:<64-character lowercase SHA-256>",
-  "sha256": "<64-character lowercase SHA-256>",
-  "s3_key": "alice/<sha256>",
-  "user_id": "alice"
-}
+```sh
+python -m worker
 ```
 
-`file_hash` identifies the master record in `CloudVault_Files`, not an individual
-logical reference. Filenames live on user references and are not processing inputs.
-Workers must re-read the master and use its trusted raw key, size, checksum, and
-content type. Reject inconsistent or unsupported message versions/payloads.
+`python -m worker --once` runs a single long-poll cycle.
 
-Processing requirements:
+For every message, the worker re-reads trusted master metadata, conditionally claims
+a 120-second DynamoDB lease, verifies the raw S3 object's checksum and size, then
+processes it in a bounded subprocess. Images are resized, stripped of metadata,
+watermarked, and thumbnailed. PDFs are watermarked and have active annotations
+removed. Processed assets use deterministic content-addressed S3 keys.
 
-1. Long poll with `WaitTimeSeconds=20`. SQS delivery is at least once.
-2. Claim the master with a conditional write from `PENDING_UPLOAD` **or** `QUEUED`
-   to `PROCESSING`: a message can arrive before confirmation marks it `QUEUED`.
-   Use an expiring lease to recover from worker crashes and exclude concurrent workers.
-3. A `READY` record needs no further work; safely acknowledge duplicate delivery.
-4. Validate actual file contents and resource limits before processing with Pillow/pypdf.
-   Do not trust the declared MIME type or assume PDF compression reduces every file.
-5. Write output under a deterministic tenant-scoped processed key. Record
-   `processed_s3_key` and integer `processed_size_bytes`, then conditionally mark
-   the master `READY` using the active lease. Never overwrite another tenant's output.
-6. Delete the SQS message only after a committed successful result. Extend visibility
-   during long tasks and recover expired leases on retry. Coordinate permanent
-   `FAILED` records with the DLQ policy rather than silently dropping failed messages.
-
-All logical references read their processing state from this master record. A worker
-must not create per-reference processed copies or charge their sizes multiple times.
+The lease and conditional completion update make duplicate SQS delivery safe. Failed
+attempts return to `QUEUED` with exponential backoff; after three attempts the master
+is `FAILED` and the message remains available for the configured SQS DLQ policy.
+The worker enforces a 50 MiB input limit, 25 MiB output limit, 20 MP image limit,
+100-page PDF limit, and the configured 1–90 second processing timeout. It does not
+perform malware scanning.

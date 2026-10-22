@@ -21,6 +21,7 @@ MarkupSafe==3.0.4
 moto==5.2.4
 opentelemetry-api==1.45.1
 packaging==26.3
+pillow==13.0.0
 pluggy==1.7.0
 py-partiql-parser==0.6.3
 pycparser==3.11
@@ -28,10 +29,12 @@ pydantic==2.14.1
 pydantic-settings==2.16.1
 pydantic_core==2.50.1
 Pygments==2.21.0
+pypdf==6.21.2
 pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 PyYAML==6.0.3
+reportlab==4.5.1
 requests==2.34.2
 responses==0.26.3
 ruff==0.17.1

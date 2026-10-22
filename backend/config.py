@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     tenant_tokens: dict[str, str] = Field(default_factory=dict)
     cors_origins: list[str] = ["http://localhost:5173"]
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    processing_timeout_seconds: int = Field(default=60, ge=1, le=90)
 
     @model_validator(mode="after")
     def validate_tokens(self):
