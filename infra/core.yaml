@@ -12,6 +12,11 @@ Metadata:
       - Deploy project resources only in the selected Region.
       - Keep data private and retain it on stack deletion or replacement.
 Parameters:
+  ResourcePrefix:
+    Type: String
+    Default: cloudvault-core
+    AllowedPattern: '^[a-z][a-z0-9-]{2,19}$'
+    Description: Stable physical resource prefix; preserve it when adopting retained data.
   DashboardOrigin:
     Type: String
     Default: http://localhost:5173
@@ -28,7 +33,7 @@ Resources:
         must: [Never expire confirmed current objects, Never enable public access]
     Properties:
       BucketName:
-        Fn::Sub: '${AWS::StackName}-raw-${AWS::AccountId}-${AWS::Region}'
+        Fn::Sub: '${ResourcePrefix}-raw-${AWS::AccountId}-${AWS::Region}'
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -68,7 +73,7 @@ Resources:
         must: [Keep current processed files, Never enable public access]
     Properties:
       BucketName:
-        Fn::Sub: '${AWS::StackName}-processed-${AWS::AccountId}-${AWS::Region}'
+        Fn::Sub: '${ResourcePrefix}-processed-${AWS::AccountId}-${AWS::Region}'
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -131,7 +136,7 @@ Resources:
         why: Hash masters use provisioned capacity to use the recurring free allocation instead of on-demand billing.
         must: [No autoscaling or paid backups for this demo, Preserve file_hash string partition key]
     Properties:
-      TableName: {Fn::Sub: '${AWS::StackName}-files'}
+      TableName: {Fn::Sub: '${ResourcePrefix}-files'}
       BillingMode: PROVISIONED
       ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
       AttributeDefinitions: [{AttributeName: file_hash, AttributeType: S}]
@@ -146,7 +151,7 @@ Resources:
         why: Tenant-scoped logical references share master objects without duplicating bytes.
         must: [Preserve user_id partition and file_id sort keys, Keep fixed provisioned demo capacity]
     Properties:
-      TableName: {Fn::Sub: '${AWS::StackName}-user-files'}
+      TableName: {Fn::Sub: '${ResourcePrefix}-user-files'}
       BillingMode: PROVISIONED
       ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
       AttributeDefinitions:
@@ -165,13 +170,13 @@ Resources:
         why: Keeps failed jobs for investigation; service-managed encryption avoids KMS requests.
         must: [Accept redrive only from this stack's job queue]
     Properties:
-      QueueName: {Fn::Sub: '${AWS::StackName}-dlq'}
+      QueueName: {Fn::Sub: '${ResourcePrefix}-dlq'}
       SqsManagedSseEnabled: true
       MessageRetentionPeriod: 1209600
       RedriveAllowPolicy:
         redrivePermission: byQueue
         sourceQueueArns:
-          - Fn::Sub: 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${AWS::StackName}-jobs'
+          - Fn::Sub: 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${ResourcePrefix}-jobs'
   JobQueue:
     Type: AWS::SQS::Queue
     DeletionPolicy: Retain
@@ -181,7 +186,7 @@ Resources:
         why: Buffers processing work while the API stays responsive; long polling bounds idle request volume.
         must: [Worker must extend visibility for long jobs, Redrive after three failed receives]
     Properties:
-      QueueName: {Fn::Sub: '${AWS::StackName}-jobs'}
+      QueueName: {Fn::Sub: '${ResourcePrefix}-jobs'}
       SqsManagedSseEnabled: true
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 120
@@ -192,7 +197,7 @@ Resources:
   QueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
-      Queues: [{Ref: JobQueue}, {Ref: DeadLetterQueue}]
+      Queues: [{Ref: JobQueue}]
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -200,9 +205,20 @@ Resources:
             Effect: Deny
             Principal: '*'
             Action: 'sqs:*'
-            Resource:
-              - Fn::GetAtt: [JobQueue, Arn]
-              - Fn::GetAtt: [DeadLetterQueue, Arn]
+            Resource: {Fn::GetAtt: [JobQueue, Arn]}
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  DeadLetterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [{Ref: DeadLetterQueue}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 'sqs:*'
+            Resource: {Fn::GetAtt: [DeadLetterQueue, Arn]}
             Condition: {Bool: {'aws:SecureTransport': 'false'}}
   RuntimeRole:
     Type: AWS::IAM::Role

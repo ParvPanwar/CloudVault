@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     aws_region: str = "ap-southeast-2"
+    aws_profile: str | None = Field(default=None, min_length=1)
     raw_bucket: str = ""
     processed_bucket: str = ""
     queue_url: str = ""

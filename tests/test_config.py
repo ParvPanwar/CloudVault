@@ -36,3 +36,16 @@ def test_missing_aws_config_does_not_contact_aws():
             client.get("/api/files", headers={"Authorization": f"Bearer {token}"}).status_code
             == 503
         )
+
+
+def test_named_profile_is_used_instead_of_environment_credentials(cloud, tmp_path, monkeypatch):
+    credentials = tmp_path / "credentials"
+    credentials.write_text(
+        "[cloudvault-test]\naws_access_key_id = profile-test-key\n"
+        "aws_secret_access_key = profile-test-secret\n"
+    )
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(credentials))
+    cloud.app.state.settings.aws_profile = "cloudvault-test"
+    assert cloud.client.get("/api/files").status_code == 200
+    selected = cloud.app.state.services.storage.client._request_signer._credentials
+    assert selected.access_key == "profile-test-key"

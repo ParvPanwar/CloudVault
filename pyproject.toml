@@ -11,7 +11,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn>=0.30,<1",
     "pydantic-settings>=2.6,<3",
-    "boto3>=1.36,<2",
+    "boto3[crt]>=1.36,<2",
 ]
 
 [project.optional-dependencies]

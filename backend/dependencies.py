@@ -39,7 +39,7 @@ def get_services(request: Request) -> Services:
         settings = request.app.state.settings
         if not all([settings.raw_bucket, settings.processed_bucket, settings.queue_url]):
             raise HTTPException(503, "Configure RAW_BUCKET, PROCESSED_BUCKET and QUEUE_URL")
-        session = boto3.Session(region_name=settings.aws_region)
+        session = boto3.Session(region_name=settings.aws_region, profile_name=settings.aws_profile)
         config = Config(
             connect_timeout=3,
             read_timeout=5,
