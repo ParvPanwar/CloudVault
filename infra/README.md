@@ -6,9 +6,10 @@ credentials and application tokens must never be committed.
 
 ## Stacks
 
-- `core.yaml` (`cloudvault-core`): two private S3 buckets, two DynamoDB tables,
+- `core.yaml` (`cloudvault-foundation`): two private S3 buckets, two DynamoDB tables,
   a standard SQS processing queue and DLQ, HTTPS-only bucket/queue policies, and
   an EC2 runtime IAM role and instance profile. No EC2 instance is launched.
+  The stable physical-resource prefix is `cloudvault-core`; preserve it on updates.
 - `budget.yaml` (`cloudvault-cost-alerts`): a monitoring-only global billing budget,
   managed by a Sydney CloudFormation stack. The budget API itself uses the global
   billing endpoint. The recipient is a `NoEcho` deployment parameter with no default.
@@ -50,7 +51,8 @@ commands are provided for humans; coding-agent AWS operations use the AWS MCP se
 
 ```sh
 aws cloudformation deploy --profile cloudvault --region ap-southeast-2 \
-  --stack-name cloudvault-core --template-file infra/core.yaml \
+  --stack-name cloudvault-foundation --template-file infra/core.yaml \
+  --parameter-overrides ResourcePrefix=cloudvault-core \
   --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
 
 # Supply the recipient privately in your shell; do not save it in this repository.
@@ -88,7 +90,9 @@ Stack outputs provide `RawBucket`, `ProcessedBucket`, `FilesTable`, `UserFilesTa
 `QueueUrl`, `QueueArn`, `DeadLetterQueueUrl`, `RuntimeRoleArn`, and
 `RuntimeInstanceProfile`. Store output snapshots only under ignored `infra/.local/`.
 Copy the corresponding values into `.env`, using the names in `.env.example`.
-Use a local named AWS profile for development and the instance role on EC2. Never
+Set `AWS_PROFILE=cloudvault` in the local `.env`; leave that setting unset on EC2
+so the SDK uses its instance role. The Python dependencies include CRT support for
+refreshing browser-login credentials. Never
 copy the browser sign-in cache or temporary AWS keys into application configuration.
 
 The bucket CORS origin defaults to `http://localhost:5173`. Change `DashboardOrigin`
