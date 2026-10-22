@@ -40,6 +40,25 @@ The server can start without AWS configuration. Authenticated file requests retu
 `503` until resource settings are supplied. Without tenant tokens, all file requests
 return `401`. Local tests need neither an AWS account nor real credentials.
 
+## AWS Agent Toolkit
+
+The local toolkit is configured with the `cloudvault` AWS CLI profile and selected
+Region `ap-southeast-2` (Sydney), using the new AWS experience. The toolkit's MCP
+endpoint uses `us-east-1`; project resources must stay in `ap-southeast-2`.
+Confirm the selected Region in AWS Settings → View all projects → Overview →
+Additional Info → Region before provisioning resources.
+
+Renew browser-based sign-in when needed:
+
+```sh
+aws login --profile cloudvault --region ap-southeast-2
+```
+
+Toolkit skills and MCP settings are installed locally, outside this repository.
+Project instructions live in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and
+`.cursor/rules/aws-agent-toolkit.mdc`. Restart your coding session to load the new
+rules and skills. This setup does not provision CloudVault infrastructure.
+
 ## API and upload flow
 
 All `/api/*` routes require `Authorization: Bearer <tenant-token>`. The server derives

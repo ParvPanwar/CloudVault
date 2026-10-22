@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    aws_region: str = "ap-south-1"
+    aws_region: str = "ap-southeast-2"
     raw_bucket: str = ""
     processed_bucket: str = ""
     queue_url: str = ""
