@@ -7,9 +7,10 @@ deduplication, DynamoDB metadata, and asynchronous jobs in SQS.
 duplicate references, original/processed download signing, paginated file lists,
 storage metrics, AWS adapter tests, and GitHub Actions checks.
 
-The AWS foundation is defined in [infra/core.yaml](infra/core.yaml) and the
-monitoring-only cost budget in [infra/budget.yaml](infra/budget.yaml). Deployment
-and cost decisions are documented in [infra/README.md](infra/README.md).
+The AWS foundation is deployed in Sydney: private S3 buckets, DynamoDB tables,
+SQS/DLQ, a scoped runtime role/profile, and email cost alerts. It is defined in
+[infra/core.yaml](infra/core.yaml) and [infra/budget.yaml](infra/budget.yaml).
+Deployment and cost decisions are documented in [infra/README.md](infra/README.md).
 
 **Next:** SQS worker (PDF/image processing), dashboard, AWS deployment, academic report.
 The API queues jobs; it does not process them yet. New confirmed files stay `QUEUED`
@@ -193,7 +194,7 @@ The tests use Moto's in-process S3, DynamoDB, and SQS implementations with dummy
 credentials. They cover authorization, isolation, signed upload constraints, object
 verification, transactional reservations, duplicate linking, pagination, metrics,
 download signing, queue failures, and worker/API state races. Signature enforcement,
-Browser CORS and end-to-end file transfers still need a browser integration check.
+browser CORS and end-to-end file transfers still need a browser integration check.
 The local backend has also passed read-only checks against real DynamoDB tables
 using the browser-login profile; those checks write no sample files or jobs.
 

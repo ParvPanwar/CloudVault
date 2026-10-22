@@ -4,6 +4,26 @@ All project stacks deploy in **ap-southeast-2 (Sydney)**. The AWS CLI profile is
 `cloudvault`. Templates are the source of truth; local outputs, email parameters,
 credentials and application tokens must never be committed.
 
+## Deployment status — 22 October 2026
+
+`cloudvault-foundation` is `UPDATE_COMPLETE`; `cloudvault-cost-alerts` is
+`CREATE_COMPLETE`. Resource readbacks confirmed private SSE-S3 buckets, versioning,
+the intended lifecycle/CORS settings, fixed provisioned DynamoDB capacity and
+deletion protection, SSE-SQS queues, DLQ redrive rules, and HTTPS-only policies.
+All three budget notifications have the private email recipient configured.
+
+IAM Access Analyzer policy validation returned no findings. Policy simulation with
+`aws:RequestedRegion=ap-southeast-2` and secure transport passed 22 cases: 18 required
+actions allowed and four unrelated/destructive actions denied. Region context is
+essential because the new experience's managed organization policies constrain
+regions. An actual EC2 role session remains to be tested when EC2 is deployed.
+
+The initial `cloudvault-core` attempt rolled back because SQS requires one resource
+per queue-policy statement. Its six retained data resources were imported into
+`cloudvault-foundation` and the policies corrected. The old stack is a historical
+`ROLLBACK_COMPLETE` record; it is not a second live deployment. No data resources
+were duplicated or discarded during recovery.
+
 ## Stacks
 
 - `core.yaml` (`cloudvault-foundation`): two private S3 buckets, two DynamoDB tables,
@@ -92,8 +112,8 @@ Stack outputs provide `RawBucket`, `ProcessedBucket`, `FilesTable`, `UserFilesTa
 Copy the corresponding values into `.env`, using the names in `.env.example`.
 Set `AWS_PROFILE=cloudvault` in the local `.env`; leave that setting unset on EC2
 so the SDK uses its instance role. The Python dependencies include CRT support for
-refreshing browser-login credentials. Never
-copy the browser sign-in cache or temporary AWS keys into application configuration.
+refreshing browser-login credentials. Never copy the browser sign-in cache or
+temporary AWS keys into application configuration.
 
 The bucket CORS origin defaults to `http://localhost:5173`. Change `DashboardOrigin`
 when the dashboard is deployed and set API `CORS_ORIGINS` to the same exact origin.

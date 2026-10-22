@@ -1,5 +1,8 @@
 # Project Context: CloudVault
 
+> Original project proposal. Current implementation and AWS cost constraints are
+> documented in [README.md](README.md) and [infra/README.md](infra/README.md).
+
 **Course:** UCS531: Cloud Computing  
 **Project Title:** CloudVault: Decoupled Multi-Tenant Cloud Storage with In-Line Deduplication and Asynchronous Processing Using AWS S3, SQS, and EC2  
 **Target Platform:** Amazon Web Services (AWS) — 100% Free Tier ($0.00 Incurred Cost)

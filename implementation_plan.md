@@ -1,5 +1,8 @@
 # CloudVault: Implementation Plan from Scratch
 
+> Historical roadmap. For current deployment names, cost eligibility and implementation
+> status, use [README.md](README.md) and [infra/README.md](infra/README.md).
+
 A step-by-step engineering roadmap to build, deploy, and demonstrate **CloudVault** (*Decoupled Multi-Tenant Cloud Storage with In-Line Deduplication and Asynchronous Processing Using AWS S3, SQS, and EC2*) with 100% \$0.00 AWS Free-Tier compliance.
 
 ---
