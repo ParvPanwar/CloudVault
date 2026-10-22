@@ -12,4 +12,5 @@ dist/
 .DS_Store
 htmlcov/
 .coverage
+infra/.local/
 

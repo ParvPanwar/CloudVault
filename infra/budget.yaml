@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudVault monitoring-only monthly usage-cost budget with early email notifications before credits.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    ref:
+      - at: infra/README.md
+        has: Global billing endpoint and credit-aware alert rationale
+        scope: shared
+Parameters:
+  AlertEmail:
+    Type: String
+    NoEcho: true
+    AllowedPattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    Description: Private alert recipient, supplied at deployment and never committed.
+Resources:
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Detects usage even when promotional credits cover it; no automatic spending actions.
+        must: [Budget is not a spending cap, Keep email out of source control]
+    Properties:
+      Budget:
+        BudgetName: {Fn::Sub: '${AWS::StackName}-monthly'}
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: 1, Unit: USD}
+        CostTypes:
+          IncludeCredit: false
+          IncludeRefund: false
+          UseAmortized: false
+          UseBlended: false
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            ThresholdType: ABSOLUTE_VALUE
+            Threshold: 0.01
+          Subscribers: [{SubscriptionType: EMAIL, Address: {Ref: AlertEmail}}]
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            ThresholdType: PERCENTAGE
+            Threshold: 100
+          Subscribers: [{SubscriptionType: EMAIL, Address: {Ref: AlertEmail}}]
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            ThresholdType: PERCENTAGE
+            Threshold: 100
+          Subscribers: [{SubscriptionType: EMAIL, Address: {Ref: AlertEmail}}]
+Outputs:
+  BudgetName:
+    Description: Monthly monitoring-only budget; alerts do not stop resources.
+    Value: {Fn::Sub: '${AWS::StackName}-monthly'}

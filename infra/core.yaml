@@ -1,0 +1,285 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudVault storage and processing foundation with private storage and fixed demo database capacity.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    ref:
+      - at: infra/README.md
+        has: Cost constraints, permissions, deployment and retention decisions
+        scope: shared
+    must:
+      - Deploy project resources only in the selected Region.
+      - Keep data private and retain it on stack deletion or replacement.
+Parameters:
+  DashboardOrigin:
+    Type: String
+    Default: http://localhost:5173
+    AllowedPattern: '^https?://[^/]+$'
+    Description: Exact dashboard origin without a trailing slash.
+Resources:
+  RawBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Original files remain available for downloads and processing; service encryption avoids KMS charges.
+        must: [Never expire confirmed current objects, Never enable public access]
+    Properties:
+      BucketName:
+        Fn::Sub: '${AWS::StackName}-raw-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration: {Status: Enabled}
+      LifecycleConfiguration:
+        Rules:
+          - Id: BoundNoncurrentAndMultipartStorage
+            Status: Enabled
+            NoncurrentVersionExpiration: {NoncurrentDays: 1}
+            AbortIncompleteMultipartUpload: {DaysAfterInitiation: 1}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: [{Ref: DashboardOrigin}]
+            AllowedMethods: [PUT, GET, HEAD]
+            AllowedHeaders:
+              - content-type
+              - content-length
+              - x-amz-checksum-sha256
+              - x-amz-sdk-checksum-algorithm
+              - if-none-match
+            ExposedHeaders: [ETag, x-amz-checksum-sha256]
+            MaxAge: 300
+  ProcessedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Separates worker output from original uploads; expires only obsolete versions.
+        must: [Keep current processed files, Never enable public access]
+    Properties:
+      BucketName:
+        Fn::Sub: '${AWS::StackName}-processed-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration: {Status: Enabled}
+      LifecycleConfiguration:
+        Rules:
+          - Id: BoundNoncurrentAndMultipartStorage
+            Status: Enabled
+            NoncurrentVersionExpiration: {NoncurrentDays: 1}
+            AbortIncompleteMultipartUpload: {DaysAfterInitiation: 1}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: [{Ref: DashboardOrigin}]
+            AllowedMethods: [GET, HEAD]
+            ExposedHeaders: [ETag]
+            MaxAge: 300
+  RawBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: {Ref: RawBucket}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - Fn::GetAtt: [RawBucket, Arn]
+              - Fn::Sub: '${RawBucket.Arn}/*'
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  ProcessedBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: {Ref: ProcessedBucket}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - Fn::GetAtt: [ProcessedBucket, Arn]
+              - Fn::Sub: '${ProcessedBucket.Arn}/*'
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  FilesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Hash masters use provisioned capacity to use the recurring free allocation instead of on-demand billing.
+        must: [No autoscaling or paid backups for this demo, Preserve file_hash string partition key]
+    Properties:
+      TableName: {Fn::Sub: '${AWS::StackName}-files'}
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions: [{AttributeName: file_hash, AttributeType: S}]
+      KeySchema: [{AttributeName: file_hash, KeyType: HASH}]
+      DeletionProtectionEnabled: true
+  UserFilesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Tenant-scoped logical references share master objects without duplicating bytes.
+        must: [Preserve user_id partition and file_id sort keys, Keep fixed provisioned demo capacity]
+    Properties:
+      TableName: {Fn::Sub: '${AWS::StackName}-user-files'}
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: {ReadCapacityUnits: 5, WriteCapacityUnits: 5}
+      AttributeDefinitions:
+        - {AttributeName: user_id, AttributeType: S}
+        - {AttributeName: file_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: user_id, KeyType: HASH}
+        - {AttributeName: file_id, KeyType: RANGE}
+      DeletionProtectionEnabled: true
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Keeps failed jobs for investigation; service-managed encryption avoids KMS requests.
+        must: [Accept redrive only from this stack's job queue]
+    Properties:
+      QueueName: {Fn::Sub: '${AWS::StackName}-dlq'}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+      RedriveAllowPolicy:
+        redrivePermission: byQueue
+        sourceQueueArns:
+          - Fn::Sub: 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${AWS::StackName}-jobs'
+  JobQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Buffers processing work while the API stays responsive; long polling bounds idle request volume.
+        must: [Worker must extend visibility for long jobs, Redrive after three failed receives]
+    Properties:
+      QueueName: {Fn::Sub: '${AWS::StackName}-jobs'}
+      SqsManagedSseEnabled: true
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: {Fn::GetAtt: [DeadLetterQueue, Arn]}
+        maxReceiveCount: 3
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [{Ref: JobQueue}, {Ref: DeadLetterQueue}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 'sqs:*'
+            Resource:
+              - Fn::GetAtt: [JobQueue, Arn]
+              - Fn::GetAtt: [DeadLetterQueue, Arn]
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Shared EC2 host runs API and worker; no human trust or administrator permissions.
+        must:
+          - Trust EC2 only; EC2 role assumption does not supply SourceArn or SourceAccount.
+          - Scope data access to this stack's objects, tables and job queue.
+    Properties:
+      Path: /cloudvault/
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudVaultRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RawAndProcessedObjects
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource:
+                  - Fn::Sub: '${RawBucket.Arn}/*'
+                  - Fn::Sub: '${ProcessedBucket.Arn}/*'
+              - Sid: DetectMissingUploads
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: {Fn::GetAtt: [RawBucket, Arn]}
+              - Sid: FileMetadata
+                Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Resource:
+                  - Fn::GetAtt: [FilesTable, Arn]
+                  - Fn::GetAtt: [UserFilesTable, Arn]
+              - Sid: ProcessingJobs
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                Resource: {Fn::GetAtt: [JobQueue, Arn]}
+  RuntimeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /cloudvault/
+      Roles: [{Ref: RuntimeRole}]
+Outputs:
+  RawBucket:
+    Description: Original-upload bucket for RAW_BUCKET.
+    Value: {Ref: RawBucket}
+  ProcessedBucket:
+    Description: Worker-output bucket for PROCESSED_BUCKET.
+    Value: {Ref: ProcessedBucket}
+  FilesTable:
+    Description: Hash-master table for FILES_TABLE.
+    Value: {Ref: FilesTable}
+  UserFilesTable:
+    Description: Tenant-reference table for USER_FILES_TABLE.
+    Value: {Ref: UserFilesTable}
+  QueueUrl:
+    Description: Processing queue URL for QUEUE_URL.
+    Value: {Ref: JobQueue}
+  QueueArn:
+    Description: Processing queue ARN for permissions and verification.
+    Value: {Fn::GetAtt: [JobQueue, Arn]}
+  DeadLetterQueueUrl:
+    Description: Failed-job queue URL for inspection.
+    Value: {Ref: DeadLetterQueue}
+  RuntimeRoleArn:
+    Description: Scoped EC2 runtime role; not attached to human team members.
+    Value: {Fn::GetAtt: [RuntimeRole, Arn]}
+  RuntimeInstanceProfile:
+    Description: Profile to attach when deploying EC2 later.
+    Value: {Ref: RuntimeInstanceProfile}

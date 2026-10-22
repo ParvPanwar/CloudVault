@@ -1,60 +1,113 @@
-# AWS prerequisites for the core backend
+# CloudVault AWS foundation
 
-No provisioning runs automatically. Create the following resources in one AWS
-account and region, and put their names/URL in `.env`. Verify your account's current
-free-tier eligibility and set billing alerts before provisioning. Alerts do not cap spending.
+All project stacks deploy in **ap-southeast-2 (Sydney)**. The AWS CLI profile is
+`cloudvault`. Templates are the source of truth; local outputs, email parameters,
+credentials and application tokens must never be committed.
 
-1. Two private general-purpose S3 buckets: raw uploads and processed output. Keep
-   Block Public Access enabled and use S3-managed encryption (SSE-S3) for this milestone.
-   The raw bucket needs a CORS policy matching your dashboard origin; see
-   [s3-cors.example.json](s3-cors.example.json). Replace the localhost origin when deploying.
-   Do not put an automatic expiration policy on all raw objects: confirmed originals
-   are the source for downloads. Abandoned-upload cleanup needs metadata awareness.
-2. DynamoDB table `CloudVault_Files`: partition key `file_hash` (String), no sort key.
-3. DynamoDB table `CloudVault_UserFiles`: partition key `user_id` (String), sort key
-   `file_id` (String). No secondary indexes are required. For the small demo, start
-   with provisioned 5 RCU/5 WCU per table, autoscaling disabled, subject to your
-   account's limits and eligibility. Transactions consume extra capacity.
-4. Standard SQS queue `cloudvault-job-queue`, plus `cloudvault-dlq`; configure redrive
-   after 3 receives. Set an initial visibility timeout of 120 seconds; the future
-   worker must extend it for longer jobs. Use SQS-managed encryption for this milestone.
-5. A local AWS profile for development, or an EC2 instance role for deployment, with
-   the permissions below. The API does not create or administer resources.
+## Stacks
 
-## API runtime permissions
+- `core.yaml` (`cloudvault-core`): two private S3 buckets, two DynamoDB tables,
+  a standard SQS processing queue and DLQ, HTTPS-only bucket/queue policies, and
+  an EC2 runtime IAM role and instance profile. No EC2 instance is launched.
+- `budget.yaml` (`cloudvault-cost-alerts`): a monitoring-only global billing budget,
+  managed by a Sydney CloudFormation stack. The budget API itself uses the global
+  billing endpoint. The recipient is a `NoEcho` deployment parameter with no default.
 
-Scope every resource ARN to the actual account, region, table, queue, and bucket.
+## Cost decisions
 
-| Actions | Resource |
-| --- | --- |
-| `s3:PutObject`, `s3:GetObject` | `arn:aws:s3:::RAW_BUCKET/*` |
-| `s3:GetObject` | `arn:aws:s3:::PROCESSED_BUCKET/*` |
-| `s3:ListBucket` | `arn:aws:s3:::RAW_BUCKET` (allows HEAD on absent keys to report 404) |
-| `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:UpdateItem`, `dynamodb:Query` | Both table ARNs |
-| `sqs:SendMessage` | Job queue ARN |
+The live eligibility check on 22 October 2026 reported an ACTIVE FREE plan, $100
+in remaining promotional credits, expiration 22 April 2027, and no reported Free
+Tier usage. This is a point-in-time observation, not a guarantee of future coverage.
+A missing service in the usage response does not establish a free allowance.
 
-DynamoDB transactions are authorized using the underlying `PutItem`/`UpdateItem`
-permissions; see [AWS transaction IAM guidance](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html).
-The worker will additionally need raw-object reads, processed-object writes, metadata
-updates, and SQS receive/delete/change-visibility permissions. Add those with the worker,
-not to the API-only role. KMS encryption requires additional key policies and permissions
-and is outside this setup.
+Each DynamoDB table uses provisioned 5 RCU/5 WCU (no indexes or autoscaling), keeping
+this project's total below the currently documented recurring provisioned allowance.
+Tables use default AWS-owned encryption; S3 uses SSE-S3; SQS uses SSE-SQS. No
+customer-managed KMS keys, paid backups, PITR, access-log buckets, or compute are
+created. S3 activity can consume promotional credits; requests, storage, and transfer
+must remain small. Credits are not the same as a service being permanently free.
 
-The API never runs a DynamoDB `Scan` and never accepts an S3 key or tenant ID from the
-client. Authentication and tenant scoping happen in the API; the service role can access
-the configured project resources, so protect its credentials and the host.
+S3 versioning is enabled. Noncurrent versions expire after one day; incomplete
+multipart uploads are aborted after one day. **Current originals and processed
+files never expire automatically.** Abandoned current uploads need an application-aware
+cleanup job later. Do not add a blanket current-object expiry rule.
 
-## Live integration checklist
+The $1 monthly budget tracks project-wide usage costs before credits/refunds. It
+emails when actual cost exceeds $0.01, actual cost exceeds $1, or forecast exceeds
+$1. Forecasting may require billing history. Alerts can be delayed and do not cap
+spending, stop resources, or upgrade the AWS plan. No paid budget actions or reports
+are configured. Check plan/credit status in AWS Settings > Billing.
 
-- Start the API using the intended profile/role, initiate an upload, and PUT using
-  all returned headers. Confirm that an incorrect checksum or a replacement PUT fails.
-- Verify the browser preflight succeeds for the dashboard origin. Use HTTPS outside
-  localhost; browser SHA-256 through Web Crypto needs a secure context.
-- Confirm a real object, inspect its DynamoDB state and the SQS message. Retry
-  confirmation and ensure it returns the current state.
-- Upload again as the same tenant: no second S3 object. Another tenant must see no
-  duplicate and must receive 404 for the first tenant's file ID.
-- Test original download expiry. Processed downloads will remain unavailable until
-  the worker writes `READY`, `processed_s3_key`, and `processed_size_bytes`.
-- Review actual AWS usage and remove demo resources when finished. Nothing here
-  guarantees a zero bill or acts as a spending limit.
+Sources: [Free-plan supported services](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html),
+[DynamoDB recurring allowance](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html),
+[AWS Free Tier](https://aws.amazon.com/free/).
+
+## Deploy or update
+
+The templates support repeatable CloudFormation deployments. Review change sets
+before an update that could replace a resource. The following equivalent CLI
+commands are provided for humans; coding-agent AWS operations use the AWS MCP server.
+
+```sh
+aws cloudformation deploy --profile cloudvault --region ap-southeast-2 \
+  --stack-name cloudvault-core --template-file infra/core.yaml \
+  --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
+
+# Supply the recipient privately in your shell; do not save it in this repository.
+aws cloudformation deploy --profile cloudvault --region ap-southeast-2 \
+  --stack-name cloudvault-cost-alerts --template-file infra/budget.yaml \
+  --parameter-overrides AlertEmail="$CLOUDVAULT_ALERT_EMAIL" \
+  --no-fail-on-empty-changeset
+```
+
+The role trusts EC2 only. Its inline policy scopes object reads/writes, raw bucket
+existence checks, metadata reads/writes, and queue processing to this stack's
+resources. It includes worker permissions because the planned single EC2 host runs
+both processes. It cannot administer resources, delete objects/tables, purge queues,
+read unrelated buckets, or access KMS keys. Keep the instance profile unattached until
+EC2 deployment. Human project permissions are managed separately by AWS.
+
+IAM Policy Autopilot 0.3.0 was run against all backend AWS adapter files. Its candidate
+included optional KMS, Object Lock, replication and transaction-delete actions, while
+not resolving the dynamically selected presigned PUT operation. Those candidates are
+not deployed verbatim: the runtime policy is scoped to the declared SSE-S3/SSE-SQS,
+AWS-owned DynamoDB encryption and the backend/worker operations listed above.
+For a repeatable static-analysis baseline:
+
+```sh
+uvx iam-policy-autopilot@0.3.0 generate-policies \
+  "$PWD/backend/dependencies.py" "$PWD/backend/services/database.py" \
+  "$PWD/backend/services/storage.py" "$PWD/backend/services/queue.py" \
+  --region ap-southeast-2 --account "$AWS_ACCOUNT_ID" \
+  --service-hints s3 dynamodb sqs --pretty
+```
+
+## Local configuration
+
+Stack outputs provide `RawBucket`, `ProcessedBucket`, `FilesTable`, `UserFilesTable`,
+`QueueUrl`, `QueueArn`, `DeadLetterQueueUrl`, `RuntimeRoleArn`, and
+`RuntimeInstanceProfile`. Store output snapshots only under ignored `infra/.local/`.
+Copy the corresponding values into `.env`, using the names in `.env.example`.
+Use a local named AWS profile for development and the instance role on EC2. Never
+copy the browser sign-in cache or temporary AWS keys into application configuration.
+
+The bucket CORS origin defaults to `http://localhost:5173`. Change `DashboardOrigin`
+when the dashboard is deployed and set API `CORS_ORIGINS` to the same exact origin.
+The API already enforces signed length/type/checksum and conditional non-overwriting
+PUTs. No S3 event notification is configured: `/confirm-upload` enqueues verified jobs.
+
+## Validation and lifecycle
+
+The user explicitly chose AWS validation and skipped installing local cfn-lint and
+cfn-guard. AWS `ValidateTemplate`, change-set pre-deployment validation, deployed
+resource readbacks, and IAM policy checks provide the validation layers for this
+milestone; they do not imply a local compliance scan passed.
+
+No durable CloudTrail trail was present during setup. Standard event history and
+CloudFormation events are available; long-term audit delivery is not configured.
+
+Buckets, tables and queues use `DeletionPolicy: Retain` and `UpdateReplacePolicy: Retain`.
+Tables also have deletion protection. Deleting the stack does **not** delete those
+retained resources or end their potential costs. Cleanup requires an explicit,
+data-aware decision, disabling table deletion protection and deleting the retained
+resources separately. No cleanup or destructive action runs automatically.
