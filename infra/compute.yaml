@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudVault single-host EC2 application runtime and web server for FastAPI backend and SQS background worker.
+
+Parameters:
+  ResourcePrefix:
+    Type: String
+    Default: cloudvault-core
+    AllowedPattern: '^[a-z][a-z0-9-]{2,19}$'
+    Description: Resource prefix matching the deployed foundation stack.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    Description: Free-Tier eligible EC2 compute instance type.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-051427e9724a0ca47
+    Description: VPC ID where the EC2 instance will be deployed.
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-032e29851b6a38101
+    Description: Public subnet ID for the EC2 host.
+  UbuntuAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Latest Ubuntu 24.04 LTS x86_64 AMI from canonical SSM.
+  KeyName:
+    Type: String
+    Default: ''
+    Description: Optional EC2 KeyPair name for SSH access.
+  RuntimeInstanceProfile:
+    Type: String
+    Default: cloudvault-foundation-RuntimeInstanceProfile-ylliCKIc8qlx
+    Description: Existing IAM Instance Profile name from cloudvault-foundation.
+  RawBucket:
+    Type: String
+    Default: cloudvault-core-raw-304835195379-ap-southeast-2
+    Description: Raw upload S3 bucket name.
+  ProcessedBucket:
+    Type: String
+    Default: cloudvault-core-processed-304835195379-ap-southeast-2
+    Description: Processed output S3 bucket name.
+  FilesTable:
+    Type: String
+    Default: cloudvault-core-files
+    Description: Master files DynamoDB table name.
+  UserFilesTable:
+    Type: String
+    Default: cloudvault-core-user-files
+    Description: User tenant files DynamoDB table name.
+  QueueUrl:
+    Type: String
+    Default: https://sqs.ap-southeast-2.amazonaws.com/304835195379/cloudvault-core-jobs
+    Description: SQS processing job queue URL.
+  TenantTokens:
+    Type: String
+    Default: '{"alice":"cloudvault_demo_alice_token_secret_12345","bob":"cloudvault_demo_bob_token_secret_12345","charlie":"cloudvault_demo_charlie_token_secret_12345"}'
+    Description: JSON mapping of demo tenant IDs to application bearer tokens (at least 32 chars each).
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for CloudVault web and worker host
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTP web traffic for dashboard and API
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH administration
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow outbound HTTPS to S3, SQS, DynamoDB and package repos
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-sg'
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref UbuntuAmiId
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      IamInstanceProfile: !Ref RuntimeInstanceProfile
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 15
+            VolumeType: gp3
+            DeleteOnTermination: true
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-host'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > >(tee /var/log/cloudvault-setup.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+          echo "=== Starting CloudVault Host Setup ==="
+
+          # 1. Update and install system dependencies
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -y
+          apt-get install -y git python3-pip python3-venv nginx curl
+
+          # 2. Clone application repository
+          mkdir -p /opt/cloudvault
+          git clone https://github.com/ParvPanwar/CloudVault.git /opt/cloudvault
+          cd /opt/cloudvault
+
+          # 3. Create Python virtual environment and install dependencies
+          python3 -m venv /opt/cloudvault/.venv
+          /opt/cloudvault/.venv/bin/pip install --upgrade pip
+          /opt/cloudvault/.venv/bin/pip install .
+
+          # 4. Resolve public IP via IMDSv2
+          IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "x-aws-ec2-metadata-token-ttl-seconds: 60" || true)
+          if [ -n "$IMDS_TOKEN" ]; then
+            PUBLIC_IP=$(curl -s -H "x-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "127.0.0.1")
+          else
+            PUBLIC_IP="127.0.0.1"
+          fi
+
+          echo "Detected Public IP: $PUBLIC_IP"
+
+          # 5. Write runtime environment configuration
+          cat <<EOF > /opt/cloudvault/.env
+          AWS_REGION=${AWS::Region}
+          RAW_BUCKET=${RawBucket}
+          PROCESSED_BUCKET=${ProcessedBucket}
+          QUEUE_URL=${QueueUrl}
+          FILES_TABLE=${FilesTable}
+          USER_FILES_TABLE=${UserFilesTable}
+          TENANT_TOKENS=${TenantTokens}
+          CORS_ORIGINS=["http://$PUBLIC_IP", "http://$PUBLIC_IP:80", "http://localhost:5173", "http://127.0.0.1:8000"]
+          MAX_UPLOAD_BYTES=52428800
+          PROCESSING_TIMEOUT_SECONDS=60
+          EOF
+
+          chmod 600 /opt/cloudvault/.env
+          chown -R ubuntu:ubuntu /opt/cloudvault
+
+          # 6. Configure Systemd services
+          cat <<EOF > /etc/systemd/system/cloudvault-api.service
+          [Unit]
+          Description=CloudVault FastAPI Application
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/opt/cloudvault
+          EnvironmentFile=/opt/cloudvault/.env
+          ExecStart=/opt/cloudvault/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          cat <<EOF > /etc/systemd/system/cloudvault-worker.service
+          [Unit]
+          Description=CloudVault Background SQS Worker Daemon
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          WorkingDirectory=/opt/cloudvault
+          EnvironmentFile=/opt/cloudvault/.env
+          ExecStart=/opt/cloudvault/.venv/bin/python -m worker
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # 7. Configure Nginx reverse proxy
+          cat <<'EOF' > /etc/nginx/sites-available/cloudvault
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+
+              client_max_body_size 60M;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8000;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+          EOF
+
+          rm -f /etc/nginx/sites-enabled/default
+          ln -sf /etc/nginx/sites-available/cloudvault /etc/nginx/sites-enabled/cloudvault
+          nginx -t && systemctl restart nginx
+
+          # 8. Start and enable system services
+          systemctl daemon-reload
+          systemctl enable --now cloudvault-api.service
+          systemctl enable --now cloudvault-worker.service
+
+          echo "=== CloudVault Host Setup Completed Successfully ==="
+
+Outputs:
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref AppInstance
+  PublicIp:
+    Description: Public IPv4 address for web dashboard and API access
+    Value: !GetAtt AppInstance.PublicIp
+  PublicDnsName:
+    Description: Public DNS name for web dashboard
+    Value: !GetAtt AppInstance.PublicDnsName
+  DashboardUrl:
+    Description: HTTP URL to access the live dashboard
+    Value: !Sub 'http://${AppInstance.PublicIp}'
+  SecurityGroupId:
+    Description: Security group attached to the host
+    Value: !Ref InstanceSecurityGroup
